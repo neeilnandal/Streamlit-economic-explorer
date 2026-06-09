@@ -1,4 +1,3 @@
-
 import math
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -697,63 +696,3 @@ else:
     )
 
 
-# -----------------------------------------------------------------------------
-# Deployment and README helper section
-
-st.header("Deployment notes", divider="gray")
-
-with st.expander("Streamlit Community Cloud checklist"):
-    st.markdown(
-        """
-        To deploy this dashboard:
-
-        1. Push the repo to GitHub.
-        2. Make sure the entrypoint file is named `streamlit_app.py`.
-        3. Add a `requirements.txt` file.
-        4. Go to Streamlit Community Cloud.
-        5. Select the GitHub repository.
-        6. Select `streamlit_app.py` as the app file.
-        7. Deploy the app.
-
-        Recommended `requirements.txt`:
-
-        ```text
-        streamlit
-        pandas
-        requests
-        ```
-
-        If you use Local CSV mode, keep the file at:
-
-        ```text
-        data/gdp_data.csv
-        ```
-        """
-    )
-
-with st.expander("Screenshot checklist for README"):
-    st.markdown(
-        """
-        Add these screenshots to the `screenshots/` folder after running the app:
-
-        ```text
-        screenshots/
-        ├── dashboard-overview.png
-        ├── gdp-trend-chart.png
-        ├── region-comparison.png
-        ├── top-n-rankings.png
-        └── filtered-data-download.png
-        ```
-
-        Then reference them in `README.md`:
-
-        ```markdown
-        ## Screenshots
-
-        ![Dashboard Overview](screenshots/dashboard-overview.png)
-        ![GDP Trend Chart](screenshots/gdp-trend-chart.png)
-        ![Top-N Rankings](screenshots/top-n-rankings.png)
-        ```
-        """
-    )
-````
