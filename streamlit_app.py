@@ -7,27 +7,19 @@ import requests
 import streamlit as st
 
 
-# -----------------------------------------------------------------------------
-# Page setup
-
 st.set_page_config(
     page_title="GDP Dashboard",
-    page_icon="🌍",
+    page_icon="📊",
     layout="wide",
 )
 
-st.title("🌍 GDP Dashboard")
+st.title("GDP Dashboard")
 st.caption(
     "Explore country-level GDP, GDP per capita, region trends, rankings, "
     "and inflation-adjusted comparisons using World Bank-style economic data."
 )
 
-
-# -----------------------------------------------------------------------------
-# Constants
-
 LOCAL_DATA_PATH = Path(__file__).parent / "data" / "gdp_data.csv"
-
 WORLD_BANK_API_BASE = "https://api.worldbank.org/v2"
 
 INDICATORS: Dict[str, str] = {
@@ -41,49 +33,32 @@ DEFAULT_START_YEAR = 1960
 DEFAULT_END_YEAR = 2024
 
 
-# -----------------------------------------------------------------------------
-# Helper functions
-
-def safe_divide(numerator: Optional[float], denominator: Optional[float]) -> Optional[float]:
-    """Safely divide two values and return None if division is not possible."""
+def safe_divide(
+    numerator: Optional[float],
+    denominator: Optional[float],
+) -> Optional[float]:
     if numerator is None or denominator is None:
         return None
-
     if pd.isna(numerator) or pd.isna(denominator):
         return None
-
     if denominator == 0:
         return None
-
     return numerator / denominator
 
 
 def format_billions(value: Optional[float]) -> str:
-    """Format large GDP values into billions."""
     if value is None or pd.isna(value):
         return "n/a"
-
     return f"${value / 1_000_000_000:,.0f}B"
 
 
 def format_currency(value: Optional[float]) -> str:
-    """Format per-capita values."""
     if value is None or pd.isna(value):
         return "n/a"
-
     return f"${value:,.0f}"
 
 
-def format_percentage(value: Optional[float]) -> str:
-    """Format percentage values."""
-    if value is None or pd.isna(value):
-        return "n/a"
-
-    return f"{value:,.1f}%"
-
-
 def get_api_json(url: str, params: Optional[dict] = None):
-    """Fetch JSON from World Bank API with basic error handling."""
     try:
         response = requests.get(url, params=params, timeout=20)
         response.raise_for_status()
@@ -95,28 +70,14 @@ def get_api_json(url: str, params: Optional[dict] = None):
 
 @st.cache_data(show_spinner=False)
 def get_country_metadata() -> pd.DataFrame:
-    """
-    Fetch country metadata from the World Bank API.
-
-    Returns country code, country name, region, and income level.
-    Aggregates and non-country entries are filtered out where possible.
-    """
     url = f"{WORLD_BANK_API_BASE}/country"
-    params = {
-        "format": "json",
-        "per_page": 400,
-    }
+    params = {"format": "json", "per_page": 400}
 
     payload = get_api_json(url, params=params)
 
     if not payload or len(payload) < 2:
         return pd.DataFrame(
-            columns=[
-                "Country Code",
-                "Country Name",
-                "Region",
-                "Income Level",
-            ]
+            columns=["Country Code", "Country Name", "Region", "Income Level"]
         )
 
     records = []
@@ -130,7 +91,6 @@ def get_country_metadata() -> pd.DataFrame:
         if not country_code or not country_name:
             continue
 
-        # Filter out aggregates where World Bank marks region as "Aggregates"
         if region == "Aggregates":
             continue
 
@@ -147,12 +107,11 @@ def get_country_metadata() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def fetch_world_bank_indicator(indicator_code: str, start_year: int, end_year: int) -> pd.DataFrame:
-    """
-    Fetch country-level indicator data from the World Bank API.
-
-    The API returns paginated JSON. This function fetches all returned pages.
-    """
+def fetch_world_bank_indicator(
+    indicator_code: str,
+    start_year: int,
+    end_year: int,
+) -> pd.DataFrame:
     all_rows: List[dict] = []
     page = 1
     total_pages = 1
@@ -173,16 +132,17 @@ def fetch_world_bank_indicator(indicator_code: str, start_year: int, end_year: i
 
         metadata = payload[0]
         rows = payload[1]
-
         total_pages = metadata.get("pages", 1)
 
         for row in rows:
             country = row.get("country", {})
+            year = row.get("date")
+
             all_rows.append(
                 {
                     "Country Code": row.get("countryiso3code"),
                     "Country Name": country.get("value"),
-                    "Year": int(row.get("date")) if row.get("date") else None,
+                    "Year": int(year) if year else None,
                     "Value": row.get("value"),
                 }
             )
@@ -203,19 +163,10 @@ def fetch_world_bank_indicator(indicator_code: str, start_year: int, end_year: i
 
 @st.cache_data(show_spinner=False)
 def load_local_gdp_data() -> pd.DataFrame:
-    """
-    Load local GDP data if the CSV exists.
-
-    Expected format:
-    Country Code | 1960 | 1961 | ... | 2022
-    Optional:
-    Country Name
-    """
     if not LOCAL_DATA_PATH.exists():
         return pd.DataFrame()
 
     raw_gdp_df = pd.read_csv(LOCAL_DATA_PATH)
-
     year_columns = [col for col in raw_gdp_df.columns if col.isdigit()]
 
     if "Country Code" not in raw_gdp_df.columns or not year_columns:
@@ -234,7 +185,11 @@ def load_local_gdp_data() -> pd.DataFrame:
     )
 
     gdp_df["Year"] = pd.to_numeric(gdp_df["Year"], errors="coerce")
-    gdp_df["GDP current US$"] = pd.to_numeric(gdp_df["GDP current US$"], errors="coerce")
+    gdp_df["GDP current US$"] = pd.to_numeric(
+        gdp_df["GDP current US$"],
+        errors="coerce",
+    )
+
     gdp_df = gdp_df.dropna(subset=["Country Code", "Year"])
     gdp_df["Year"] = gdp_df["Year"].astype(int)
 
@@ -243,13 +198,6 @@ def load_local_gdp_data() -> pd.DataFrame:
 
 @st.cache_data(show_spinner=True)
 def build_dataset(data_source: str, start_year: int, end_year: int) -> pd.DataFrame:
-    """
-    Build the dashboard dataset.
-
-    Supports:
-    - World Bank API mode
-    - Local CSV fallback mode
-    """
     country_meta = get_country_metadata()
 
     if data_source == "World Bank API":
@@ -290,7 +238,6 @@ def build_dataset(data_source: str, start_year: int, end_year: int) -> pd.DataFr
         if df.empty:
             return pd.DataFrame()
 
-        # Local CSV only guarantees GDP current US$.
         df["GDP per capita current US$"] = pd.NA
         df["GDP constant 2015 US$"] = pd.NA
 
@@ -303,8 +250,13 @@ def build_dataset(data_source: str, start_year: int, end_year: int) -> pd.DataFr
         )
 
         if "Country Name_metadata" in df.columns:
-            df["Country Name"] = df["Country Name"].fillna(df["Country Name_metadata"])
+            df["Country Name"] = df["Country Name"].fillna(
+                df["Country Name_metadata"]
+            )
             df = df.drop(columns=["Country Name_metadata"])
+
+    if "Country Name" not in df.columns:
+        df["Country Name"] = df["Country Code"]
 
     df["Country Label"] = df.apply(
         lambda row: (
@@ -319,7 +271,6 @@ def build_dataset(data_source: str, start_year: int, end_year: int) -> pd.DataFr
 
 
 def get_latest_available_year(df: pd.DataFrame, value_column: str) -> Optional[int]:
-    """Return the latest year with at least one non-null value."""
     valid = df.dropna(subset=[value_column])
 
     if valid.empty:
@@ -328,16 +279,16 @@ def get_latest_available_year(df: pd.DataFrame, value_column: str) -> Optional[i
     return int(valid["Year"].max())
 
 
-# -----------------------------------------------------------------------------
-# Sidebar controls
-
 st.sidebar.header("Dashboard Controls")
 
 data_source = st.sidebar.radio(
     "Data source",
     options=["World Bank API", "Local CSV"],
     index=0,
-    help="Use the World Bank API for richer features. Local CSV mode only supports GDP current US$ unless extra columns are added.",
+    help=(
+        "Use the World Bank API for richer features. "
+        "Local CSV mode only supports GDP current US$ unless extra columns are added."
+    ),
 )
 
 year_range = st.sidebar.slider(
@@ -360,12 +311,10 @@ if gdp_df.empty:
     st.stop()
 
 
-# -----------------------------------------------------------------------------
-# Filters
-
-available_regions = sorted(
-    [region for region in gdp_df["Region"].dropna().unique()]
-) if "Region" in gdp_df.columns else []
+if "Region" in gdp_df.columns:
+    available_regions = sorted(gdp_df["Region"].dropna().unique())
+else:
+    available_regions = []
 
 region_filter = st.sidebar.multiselect(
     "Region filter",
@@ -376,7 +325,9 @@ region_filter = st.sidebar.multiselect(
 region_filtered_df = gdp_df.copy()
 
 if region_filter and "Region" in region_filtered_df.columns:
-    region_filtered_df = region_filtered_df[region_filtered_df["Region"].isin(region_filter)]
+    region_filtered_df = region_filtered_df[
+        region_filtered_df["Region"].isin(region_filter)
+    ]
 
 country_options = (
     region_filtered_df[["Country Code", "Country Label"]]
@@ -384,8 +335,12 @@ country_options = (
     .sort_values("Country Label")
 )
 
-label_to_code = dict(zip(country_options["Country Label"], country_options["Country Code"]))
-code_to_label = dict(zip(country_options["Country Code"], country_options["Country Label"]))
+label_to_code = dict(
+    zip(country_options["Country Label"], country_options["Country Code"])
+)
+code_to_label = dict(
+    zip(country_options["Country Code"], country_options["Country Label"])
+)
 
 default_labels = [
     code_to_label[code]
@@ -399,7 +354,10 @@ selected_country_labels = st.sidebar.multiselect(
     default=default_labels,
 )
 
-selected_country_codes = [label_to_code[label] for label in selected_country_labels]
+selected_country_codes = [
+    label_to_code[label]
+    for label in selected_country_labels
+]
 
 metric_choice = st.sidebar.selectbox(
     "Primary metric",
@@ -430,9 +388,6 @@ if filtered_df.empty:
     st.stop()
 
 
-# -----------------------------------------------------------------------------
-# Main KPI cards
-
 latest_year = get_latest_available_year(gdp_df, metric_choice)
 
 kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
@@ -450,9 +405,6 @@ with kpi_col4:
     st.metric("Latest available year", latest_year if latest_year else "n/a")
 
 
-# -----------------------------------------------------------------------------
-# GDP over time
-
 st.header("GDP over time", divider="gray")
 
 st.line_chart(
@@ -465,18 +417,15 @@ st.line_chart(
 with st.expander("View filtered dataset"):
     st.dataframe(filtered_df, use_container_width=True)
 
-    csv_bytes = filtered_df.to_csv(index=False).encode("utf-8")
+csv_bytes = filtered_df.to_csv(index=False).encode("utf-8")
 
-    st.download_button(
-        label="Download filtered CSV",
-        data=csv_bytes,
-        file_name="filtered_gdp_data.csv",
-        mime="text/csv",
-    )
+st.download_button(
+    label="Download filtered CSV",
+    data=csv_bytes,
+    file_name="filtered_gdp_data.csv",
+    mime="text/csv",
+)
 
-
-# -----------------------------------------------------------------------------
-# Country metric cards
 
 st.header(f"Country snapshot in {to_year}", divider="gray")
 
@@ -525,9 +474,6 @@ else:
             )
 
 
-# -----------------------------------------------------------------------------
-# GDP per capita comparison
-
 st.header("GDP per capita comparison", divider="gray")
 
 per_capita_df = filtered_df.dropna(subset=["GDP per capita current US$"])
@@ -543,15 +489,14 @@ else:
     )
 
 
-# -----------------------------------------------------------------------------
-# Inflation-adjusted comparison
-
 st.header("Inflation-adjusted GDP comparison", divider="gray")
 
 constant_gdp_df = filtered_df.dropna(subset=["GDP constant 2015 US$"])
 
 if constant_gdp_df.empty:
-    st.info("Inflation-adjusted GDP data is not available for the selected source or filters.")
+    st.info(
+        "Inflation-adjusted GDP data is not available for the selected source or filters."
+    )
 else:
     st.line_chart(
         constant_gdp_df,
@@ -561,13 +506,10 @@ else:
     )
 
     st.caption(
-        "This chart uses constant 2015 US$ GDP where available, which helps compare output "
-        "over time after adjusting for price-level changes."
+        "This chart uses constant 2015 US$ GDP where available, which helps compare "
+        "output over time after adjusting for price-level changes."
     )
 
-
-# -----------------------------------------------------------------------------
-# Region-level comparison
 
 st.header("Region-level comparison", divider="gray")
 
@@ -575,8 +517,7 @@ if "Region" not in gdp_df.columns or gdp_df["Region"].dropna().empty:
     st.info("Region metadata is not available.")
 else:
     region_metric_df = (
-        region_filtered_df
-        .dropna(subset=[metric_choice])
+        region_filtered_df.dropna(subset=[metric_choice])
         .groupby(["Region", "Year"], as_index=False)[metric_choice]
         .sum()
     )
@@ -597,9 +538,6 @@ else:
         )
 
 
-# -----------------------------------------------------------------------------
-# Top-N GDP rankings
-
 st.header(f"Top {top_n} country rankings in {to_year}", divider="gray")
 
 ranking_df = (
@@ -615,17 +553,20 @@ ranking_df = (
 if ranking_df.empty:
     st.info(f"No ranking data available for {to_year}.")
 else:
-    ranking_display_df = ranking_df[
-        [
-            "Country Name",
-            "Country Code",
-            "Region",
-            "GDP current US$",
-            "GDP per capita current US$",
-            "GDP constant 2015 US$",
-        ]
-    ].copy()
+    ranking_columns = [
+        "Country Name",
+        "Country Code",
+        "Region",
+        "GDP current US$",
+        "GDP per capita current US$",
+        "GDP constant 2015 US$",
+    ]
 
+    existing_columns = [
+        column for column in ranking_columns if column in ranking_df.columns
+    ]
+
+    ranking_display_df = ranking_df[existing_columns].copy()
     ranking_display_df.insert(0, "Rank", range(1, len(ranking_display_df) + 1))
 
     st.dataframe(
@@ -640,9 +581,6 @@ else:
         y=metric_choice,
     )
 
-
-# -----------------------------------------------------------------------------
-# Percentage growth table
 
 st.header(f"Percentage growth from {from_year} to {to_year}", divider="gray")
 
@@ -694,5 +632,3 @@ else:
             "Percentage Growth": st.column_config.NumberColumn(format="%.1f%%"),
         },
     )
-
-
