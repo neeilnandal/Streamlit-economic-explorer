@@ -422,36 +422,6 @@ The main analytical value comes from comparing three views:
 
 These views help avoid a common mistake: comparing only headline GDP without considering population size or inflation.
 
-## Screenshots
-
-Add screenshots after running or deploying the app.
-
-Recommended files:
-
-```text
-screenshots/
-├── dashboard-overview.png
-├── gdp-trend-chart.png
-├── region-comparison.png
-├── top-n-rankings.png
-└── filtered-data-download.png
-```
-
-Use this section once screenshots are available:
-
-```markdown
-## Screenshots
-
-![Dashboard Overview](screenshots/dashboard-overview.png)
-
-![GDP Trend Chart](screenshots/gdp-trend-chart.png)
-
-![Region Comparison](screenshots/region-comparison.png)
-
-![Top-N Rankings](screenshots/top-n-rankings.png)
-
-![Filtered Data Download](screenshots/filtered-data-download.png)
-```
 
 ## Streamlit Community Cloud Deployment
 
